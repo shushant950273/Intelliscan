@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "intelliscan"
+version = "0.1.0"
+description = "DevSecOps assistant: SAST triage, false positive reduction, and verified patch generation."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "typer",
+    "streamlit",
+    "python-dotenv",
+    "google-genai",
+    "pytest",
+    "ruff",
+    "semgrep",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
