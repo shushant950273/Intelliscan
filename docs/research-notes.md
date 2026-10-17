@@ -32,7 +32,7 @@ Finding ground-truth labeled datasets for Static Application Security Testing (S
 Because **no ready-made dataset exists that maps Semgrep Python rule IDs to line-by-line True/False Positive labels**, the most scientifically sound and practical fallback for a final-year viva is:
 
 1. **Target Repository**: Clone [OWASP PyGoat](https://github.com/adeyosemanputra/pygoat) and a small secondary real-world open-source Python app (e.g. a small Flask/FastAPI repo).
-2. **Execute Baseline SAST**: Run `semgrep scan --config auto --json` against the target to collect raw findings (typically 40–80 findings across PyGoat).
+2. **Execute Baseline SAST**: Run `semgrep scan --config p/python --config p/security-audit --config p/secrets --json` against the target to collect raw findings (`[INFERENCE]` estimated at ~40–80 findings across PyGoat; exact count unverified until execution).
 3. **Manual Ground-Truth Labeling**:
    - Manually review each Semgrep finding using PyGoat's `Solutions/solution.md` and code inspection.
    - Label each finding into a ground-truth JSON manifest:
@@ -58,8 +58,9 @@ Because **no ready-made dataset exists that maps Semgrep Python rule IDs to line
 | **GitHub Copilot Autofix** | `[VERIFIED]` AI engine integrated with GitHub Advanced Security / CodeQL. Suggests code fixes for CodeQL alerts directly in PRs. In "Agentic Autofix", re-runs CodeQL to validate fix. | **No** (Proprietary, GHAS enterprise license required) | `[INFERENCE]` Tightly coupled to GitHub Enterprise & CodeQL ecosystem; not swappable to alternative LLMs or scanners; does not perform AST-based local context isolation for standalone CLI use. | [GitHub Copilot Autofix](https://github.com/features/copilot) / [GitHub Blog](https://github.blog/news-insights/product-news/github-copilot-autofix-is-now-generally-available/) |
 | **SonarQube AI CodeFix** | `[VERIFIED]` Suggests AI-generated fixes for SonarQube/SonarCloud issues across Java, Python, C++, etc., accessible via Web UI or IDE plugins. | **No** (Closed-source feature in SonarQube Cloud/Server) | `[INFERENCE]` Primarily an auto-fix suggester without autonomous closed-loop CLI validation; lacks an explicit 3-way triage mechanism (`Uncertain` routed to human triage queue). | [Sonar AI CodeFix](https://www.sonarsource.com/products/sonarqube/) |
 | **Snyk DeepCode AI** | `[VERIFIED]` Hybrid AI engine using symbolic AI + LLM for vulnerability detection, false positive suppression rules (`.snyk` / Web UI), and autofixes. | **No** (Proprietary platform) | `[INFERENCE]` Black-box proprietary rules engine; no user-swappable local LLM; no standalone lightweight CLI workflow that developers can inspect line-by-line. | [Snyk DeepCode AI](https://snyk.io/platform/deepcode-ai/) |
-| **`llm-sast-scanner`** (cujanovic) | `[VERIFIED]` Open-source SAST prompt skill for LLM coding agents (Claude Code, Cursor) using 7-step source-to-sink tracing and an adversarial judge. | **Yes** (GitHub open source) | `[INFERENCE]` Operates entirely inside the LLM prompt without a deterministic SAST engine (like Semgrep) as the primary scanner; high token cost; lacks deterministic closed-loop SAST re-validation. | [cujanovic/llm-sast-scanner](https://github.com/cujanovic/llm-sast-scanner) |
-| **`sast-triage`** | `[VERIFIED]` Open-source bounded LLM agent that ingests SARIF 2.1.0 reports (Semgrep, CodeQL) and uses tool calls (`read_file`, `grep`) to dismiss FPs. | **Yes** (GitHub open source) | `[INFERENCE]` Only performs false-positive filtering; does **NOT** generate verified patches, does not perform closed-loop SAST re-scans, and lacks AST-level function extraction. | [sast-triage](https://github.com/sast-triage) |
+| **`llm-sast-scanner`** (cujanovic) | `[VERIFIED]` Open-source SAST prompt skill for AI coding agents (Claude Code, Cursor) using 7-step source-to-sink tracing across 106 vulnerability classes. | **Yes** (GitHub open source) | `[INFERENCE]` Operates entirely inside the LLM prompt without a deterministic SAST engine (like Semgrep) as the primary scanner; high token cost; lacks deterministic closed-loop SAST re-validation. | [cujanovic/llm-sast-scanner](https://github.com/cujanovic/llm-sast-scanner) |
+
+> **Note on Removed Entries:** An entry for "sast-triage" was evaluated during initial research but removed from the comparison table because its URL (`https://github.com/sast-triage`) returned an HTTP 404 Not Found error and could not be verified as a live repository.
 
 ### 2.2 IntelliScan's Unique Value Proposition
 `[INFERENCE]`
@@ -84,11 +85,19 @@ Because **no ready-made dataset exists that maps Semgrep Python rule IDs to line
 - **Bibliographic Details**: Xueying Du, Jiayi Feng, Yi Zou, Wei Xu, Jie Ma, Wei Zhang, Sisi Liu, Xin Peng, Yiling Lou. arXiv:2601.18844, January 2026 / Accepted to ICSE-SEIP (International Conference on Software Engineering - Software Engineering in Practice).
 - **Peer-Reviewed Status**: *Accepted at ICSE-SEIP (Peer-reviewed conference track)*.
 - **URL**: [https://arxiv.org/abs/2601.18844](https://arxiv.org/abs/2601.18844)
-- **Method in 2 lines**: An empirical study at Tencent analyzing 433 industrial alarms from their static analysis tool (`BPcheck`) using prompt engineering and hybrid LLM-static analysis to classify true vs. false alarms.
-- **Reported Results**: `[VERIFIED]` Hybrid LLM-static analysis techniques eliminated **94% to 98% of false positives** while retaining high recall for real bugs. Reduced developer inspection overhead (which averaged 10–20 minutes per alarm manually) at a cost of only $0.0011 to $0.12 per alarm in LLM tokens.
-- **Limitations**: `[VERIFIED]` Focused on C/C++ memory/pointer bug patterns (NPD, Out-of-Bounds, Divide-by-Zero) rather than web application security injection flaws; relied on custom internal toolchains.
+- **Method in 2 lines**: An empirical study at Tencent analyzing 433 industrial alarms from Tencent's enterprise-customized static analysis tool (`BkCheck`) across its Advertising and Marketing Services (AMS) software, evaluating prompt engineering and hybrid LLM-static analysis to classify true vs. false alarms.
+- **Reported Results**: `[VERIFIED]` (arXiv:2601.18844 abstract): Hybrid LLM-static analysis techniques eliminated **94% to 98% of false positives** while retaining high recall for real bugs. Slashed manual inspection overhead (which averaged 10–20 minutes per alarm manually) down to an automated cost of 2.1 to 109.5 seconds and $0.0011 to $0.12 in LLM tokens per alarm.
+- **Scope & Limitations**: `[VERIFIED]` (arXiv:2601.18844): Evaluated on C/C++ codebases in an enterprise repository; scoped strictly to three bug patterns: Null Pointer Dereference (NPD), Out-of-Bounds (OOB), and Divide-by-Zero (DBZ). Does not evaluate dynamic web application injection flaws or Python code.
 
-### Paper 3: IRIS: LLM-Assisted Static Analysis for Detecting Security Vulnerabilities
+### Paper 3: ZeroFalse: Improving Precision in Static Analysis with LLMs
+- **Bibliographic Details**: Mohsen Iranmanesh, Sina Moradi Sabet, Sina Marefat, Ali Javidi Ghasr, Allison Wilson, Iman Sharafaldin, Mohammad A. Tayebi. arXiv:2510.02534, October 2025.
+- **Peer-Reviewed Status**: *Preprint, not peer-reviewed*.
+- **URL**: [https://arxiv.org/abs/2510.02534](https://arxiv.org/abs/2510.02534)
+- **Method in 2 lines**: Treats static analyzer outputs as structured contracts, enriching them with flow-sensitive traces, contextual evidence, and CWE-specific prompts before adjudication by an LLM across 10 frontier models.
+- **Reported Results**: `[VERIFIED]` (arXiv:2510.02534 abstract): Achieved F1-scores of 0.912 on the OWASP Java Benchmark and 0.955 on the OpenVuln dataset, maintaining both precision and recall above 90%. Demonstrated that CWE-specialized prompts significantly outperform generic prompts, with reasoning-oriented models providing the most reliable precision-recall balance.
+- **Limitations**: `[VERIFIED]` Primary benchmarks evaluated were Java (OWASP Java Benchmark) and C/C++ (OpenVuln); requires rich flow-sensitive traces from the static analyzer to achieve high precision, which lightweight pattern-based scanners do not inherently supply.
+
+### Paper 4: IRIS: LLM-Assisted Static Analysis for Detecting Security Vulnerabilities
 - **Bibliographic Details**: Ziyang Li, Saikat Dutta, Mayur Naik. arXiv:2405.17238, May 2024 (Updated 2025).
 - **Peer-Reviewed Status**: *Preprint, not peer-reviewed*.
 - **URL**: [https://arxiv.org/abs/2405.17238](https://arxiv.org/abs/2405.17238)
@@ -96,7 +105,7 @@ Because **no ready-made dataset exists that maps Semgrep Python rule IDs to line
 - **Reported Results**: `[VERIFIED]` Substantially outperformed pure static analyzers and pure LLM baselines in precision and recall, discovering previously unknown vulnerabilities in real-world software while suppressing spurious alarms caused by missing taint specifications.
 - **Limitations**: `[VERIFIED]` Requires tight coupling with a symbolic taint engine; high setup complexity compared to rule-based pattern matching scanners.
 
-### Paper 4: APPATCH: Automated Adaptive Prompting Large Language Models for Real-World Software Vulnerability Patching
+### Paper 5: APPATCH: Automated Adaptive Prompting Large Language Models for Real-World Software Vulnerability Patching
 - **Bibliographic Details**: Yu Nong, Haoran Yang, Long Cheng, Hongxin Hu, Haipeng Cai. arXiv:2408.13597, August 2024 / USENIX Security 2025.
 - **Peer-Reviewed Status**: *Accepted at USENIX Security 2025 (Peer-reviewed security conference)*.
 - **URL**: [https://arxiv.org/abs/2408.13597](https://arxiv.org/abs/2408.13597)
@@ -183,7 +192,7 @@ IntelliScan can easily parse `path`, `start["line"]`, `check_id`, `extra["messag
      1. `ast.parse(patched_code)` ensures zero syntax errors.
      2. Closed-loop SAST re-scan (`semgrep scan`) verifies that the original finding is resolved and no new findings were created.
 3. **API Rate Limits and Transience (HTTP 429 / 503)**:
-   - `[VERIFIED]` Public LLM APIs have quota limits (e.g., 15 requests per minute on free tiers) and occasional transient 503 errors.
+   - `[INFERENCE]` Public LLM API tiers typically enforce strict rate limits (e.g., Google AI Studio's free tier currently provides a 15 requests-per-minute quota for Flash models) and suffer from occasional transient 503 errors.
    - `[INFERENCE] Mitigation`: Implement exponential backoff retry logic (using `tenacity`) and support request throttling or batching.
 
 ---
@@ -209,9 +218,9 @@ Semgrep has already scanned the codebase and produced an alert. We are evaluatin
    $$\text{Precision} = \frac{TP}{TP + FP}$$
    *Interpretation*: Out of all alerts IntelliScan told the developer to fix, what percentage were real vulnerabilities?
 
-2. **Recall / True Positive Rate (TPR)** (Safety guarantee):
+2. **Recall / True Positive Rate (TPR)** (Safety target):
    $$\text{Recall} = \frac{TP}{TP + FN}$$
-   *Interpretation*: What percentage of real vulnerabilities were preserved without being accidentally silenced? In DevSecOps, Recall must approach 1.0 (zero $FN$ tolerance).
+   *Interpretation*: What percentage of real vulnerabilities were preserved without being accidentally silenced? In DevSecOps, Recall is a high-recall target, measured and reported; not guaranteed.
 
 3. **F1-Score** (Harmonic balance of precision and recall):
    $$\text{F1} = 2 \times \frac{\text{Precision} \times \text{Recall}}{\text{Precision} + \text{Recall}}$$
@@ -223,7 +232,7 @@ Semgrep has already scanned the codebase and produced an alert. We are evaluatin
 5. **Handling the 3-Way Verdict (`UNCERTAIN`)**:
    `[INFERENCE]`
    Under IntelliScan's core architecture rule: *"Uncertain verdicts go to human review. Never silently discard an alert."*
-   - Therefore, an `UNCERTAIN` finding is **never dropped** (it cannot produce a False Negative $FN$).
+   - Therefore, an `UNCERTAIN` finding is **never silently discarded**; routing it to human review is a high-recall target, measured and reported; not guaranteed. The UNCERTAIN rule reduces risk but does not eliminate false negatives if the model incorrectly classifies a true vulnerability as a false positive.
    - In metric computation, the strict safety evaluation treats `UNCERTAIN` conservatively as "Kept" (grouped with $TP$ for noise calculation, ensuring the developer sees it, but penalizing pure automated reduction).
 
 ---
@@ -231,13 +240,13 @@ Semgrep has already scanned the codebase and produced an alert. We are evaluatin
 ## 6. Top 5 Findings That Should Shape Our Requirements
 
 1. **No Standard Python SAST Ground-Truth Benchmark Exists**:
-   - *Requirement Impact*: We cannot rely on downloading an existing Python benchmark like OWASP Benchmark Java. We must specify a requirement to evaluate IntelliScan against a curated, manually verified ground-truth manifest of 50–80 Semgrep findings generated from OWASP PyGoat.
-2. **Recall Must Be Prioritized Over Aggressive Filtering ($FN \approx 0$)**:
-   - *Requirement Impact*: Recent literature (Xiong & Zhang 2026) highlights "suppression bias" where LLMs accidentally drop real CVEs. Our triage prompt must be calibrated to default to `UNCERTAIN` whenever confidence is borderline, ensuring zero silent discards of actual vulnerabilities.
+   - *Requirement Impact*: We cannot rely on downloading an existing Python benchmark like OWASP Benchmark Java. We must specify a requirement to evaluate IntelliScan against a curated, manually verified ground-truth manifest of findings (`[INFERENCE]` estimated at 50–80 alerts; exact count unverified until execution) generated from OWASP PyGoat.
+2. **Recall Must Be Prioritized Over Aggressive Filtering (High-Recall Target)**:
+   - *Requirement Impact*: Recent literature (Xiong & Zhang 2026) highlights "suppression bias" where LLMs accidentally drop real vulnerabilities. Our triage prompt must be calibrated to treat recall as a high-recall target, measured and reported; not guaranteed. The system should default to `UNCERTAIN` whenever confidence is borderline to reduce risk, although this cannot eliminate false negatives entirely.
 3. **Semantics-Aware Function Scoping (AST) is Essential**:
-   - *Requirement Impact*: Papers (APPATCH, IRIS) show that sending raw lines or entire multi-thousand line files leads to hallucinations and missed sanitizers. Our context extraction module must extract the exact enclosing function AST segment, plus local import statements.
+   - *Requirement Impact*: Papers (APPATCH, IRIS, ZeroFalse) show that sending raw lines or entire multi-thousand line files leads to hallucinations and missed sanitizers. Our context extraction module must extract the exact enclosing function AST segment, plus local import statements.
 4. **Closed-Loop SAST Re-scan is a Required Acceptance Gate**:
-   - *Requirement Impact*: Generating a patch is insufficient; studies indicate up to 40% of LLM patches contain regressions or fail to clear the alert. The patch engine requirement must enforce syntax verification (`ast.parse`) followed by an automated Semgrep re-scan before prompting the human developer for approval.
+   - *Requirement Impact*: Generating a patch is insufficient; empirical studies on automated program repair show that LLM-generated patches frequently introduce syntax errors, fail to remediate the vulnerability, or create side-effects. The patch engine requirement must enforce syntax verification (`ast.parse`) followed by an automated Semgrep re-scan before prompting the human developer for approval.
 5. **Human-in-the-Loop Git Integration**:
    - *Requirement Impact*: Commercial tools (Copilot Autofix) generate PRs; for an auditable DevSecOps assistant, the CLI must output a standard unified diff and require an explicit interactive `[y/N]` confirmation before touching git branches.
 
@@ -247,9 +256,7 @@ Semgrep has already scanned the codebase and produced an alert. We are evaluatin
 
 1. **Evaluation Ground-Truth Scope**:
    - *Question*: Are you comfortable using OWASP PyGoat as the primary evaluation target by scanning it with Semgrep and manually labeling ~50 findings into a ground-truth JSON file for your viva evaluation?
-2. **LLM Cost & Quota Strategy**:
-   - *Question*: For running our automated evaluation suite (running 50–100 alerts through Gemini), should we use Gemini 1.5 Flash (free tier/low cost, fast) or Gemini 1.5 Pro (higher reasoning, lower RPM limit)?
-3. **AST Context Boundary**:
+2. **AST Context Boundary**:
    - *Question*: When a vulnerability occurs outside any function (e.g. at global script level in Django `settings.py` or `views.py`), should our fallback extract a fixed window of lines (e.g., 15 lines before and after), or the entire file?
-4. **CLI User Experience for `UNCERTAIN`**:
+3. **CLI User Experience for `UNCERTAIN`**:
    - *Question*: When IntelliScan returns `UNCERTAIN`, should the CLI immediately prompt the user interactively with the LLM's reasoning, or mark it in the output report for manual triage later?
