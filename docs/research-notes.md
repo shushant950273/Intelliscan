@@ -192,7 +192,7 @@ IntelliScan can easily parse `path`, `start["line"]`, `check_id`, `extra["messag
      1. `ast.parse(patched_code)` ensures zero syntax errors.
      2. Closed-loop SAST re-scan (`semgrep scan`) verifies that the original finding is resolved and no new findings were created.
 3. **API Rate Limits and Transience (HTTP 429 / 503)**:
-   - `[INFERENCE]` Public LLM API tiers typically enforce strict rate limits (e.g., Google AI Studio's free tier currently provides a 15 requests-per-minute quota for Flash models) and suffer from occasional transient 503 errors.
+   - `[INFERENCE]` Public LLM API tiers typically enforce strict rate limits (e.g., Google AI Studio's free tier currently provides a 15 requests-per-minute quota for Flash models; check the actual limit on the AI Studio rate-limit page) and suffer from occasional transient 503 errors.
    - `[INFERENCE] Mitigation`: Implement exponential backoff retry logic (using `tenacity`) and support request throttling or batching.
 
 ---
@@ -246,7 +246,7 @@ Semgrep has already scanned the codebase and produced an alert. We are evaluatin
 3. **Semantics-Aware Function Scoping (AST) is Essential**:
    - *Requirement Impact*: Papers (APPATCH, IRIS, ZeroFalse) show that sending raw lines or entire multi-thousand line files leads to hallucinations and missed sanitizers. Our context extraction module must extract the exact enclosing function AST segment, plus local import statements.
 4. **Closed-Loop SAST Re-scan is a Required Acceptance Gate**:
-   - *Requirement Impact*: Generating a patch is insufficient; empirical studies on automated program repair show that LLM-generated patches frequently introduce syntax errors, fail to remediate the vulnerability, or create side-effects. The patch engine requirement must enforce syntax verification (`ast.parse`) followed by an automated Semgrep re-scan before prompting the human developer for approval.
+   - *Requirement Impact*: Generating a patch is insufficient; empirical studies on automated program repair (`[VERIFIED]` APPATCH / Paper 5, USENIX Security 2025; `[INFERENCE]`) show that LLM-generated patches frequently introduce syntax errors, fail to remediate the vulnerability, or create side-effects. The patch engine requirement must enforce syntax verification (`ast.parse`) followed by an automated Semgrep re-scan before prompting the human developer for approval.
 5. **Human-in-the-Loop Git Integration**:
    - *Requirement Impact*: Commercial tools (Copilot Autofix) generate PRs; for an auditable DevSecOps assistant, the CLI must output a standard unified diff and require an explicit interactive `[y/N]` confirmation before touching git branches.
 
