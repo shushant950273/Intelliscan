@@ -129,7 +129,93 @@ This log chronicles the step-by-step progress, architectural rationale, simple e
 - **Q2: Evaluation me dual-view metrics (EV-02/EV-03) kyun report kiye jate hain?**  
   *Answer*: Primary view `UNCERTAIN` ko "kept" manta hai taaki developer workload ka realistic assessment mile aur false negative suppression risk na ho. Secondary view `UNCERTAIN` ko exclude karke model ke pure True Positive vs False Positive discrimination power ko isolate karke measure karta hai.
 - **Q3: Ground-truth labeling me bias rokne ke liye EV-01 me kya deliverable mandatory banaya gaya?**  
-  *Answer*: `docs/labeling-guidelines.md` ek pre-written standard document hai jisme explicit criteria define hote hain ki kaunse patterns TP honge aur kaunse FP. Labeling AI ka output dekhe bina (blind evaluation) ki jati hai taaki human confirmation bias eliminate ho sake.
+  *Answer*: `docs/labeling-guidelines.md` ek pre-written standard document hai jisme explicit criteria define hote hain ki kaunse patterns TP honge aur kaunse FP. Labeling AI ka output dekhe bina (blind evaluation) ki jati hai taaki human confirmation bias reduce ho sake.
+
+---
+
+## Entry 6: System Design & Architecture Decision Records (ADRs)
+
+### 1. What Was Built
+- Authored [docs/design.md](design.md) detailing the Release 1 (R1) architecture, Mermaid sequence flows, module breakdown under `src/intelliscan/`, data models (`Finding`, `CodeContext`, `TriageResult`, `ScanReport`), abstract interface signatures, and requirements coverage.
+- Authored four formal Architecture Decision Records in `docs/adr/`:
+  - [ADR 0001](adr/0001-core-ui-separation.md): Strict separation of core domain logic from UI presentation layers.
+  - [ADR 0002](adr/0002-sast-scanner-interface.md): Encapsulation of Semgrep behind an abstract `SastScanner` interface.
+  - [ADR 0003](adr/0003-llm-provider-interface-cache-retry.md): `LLMProvider` interface with composite-key disk caching, exponential retry backoff, model fallback, and never-cache-failures policy.
+  - [ADR 0004](adr/0004-three-way-triage-uncertain-handling.md): 3-Way triage classification with conservative `UNCERTAIN` fallback handling.
+
+### 2. Why This Design
+- **Separation of Concerns**: Core domain code remains 100% free of CLI/dashboard imports, making it independently testable and headless-compatible.
+- **Fail-Safe Robustness**: Caching composite keys (`SHA256(context_hash + template_version + model_id + rule_id)`) prevents stale responses, while the never-cache-failures rule prevents transient 429/503 errors from permanently freezing findings into `UNCERTAIN`.
+- **Defensible Viva Design**: ADRs document alternatives considered and technical trade-offs, providing ready-made rationale for academic examination.
+
+### 3. How It Works (Simple Hinglish)
+> Humne system ka complete blueprint banaya. `core/` bilkul alag rahega aur CLI ya Streamlit se direct dependency nahi rakhega. Semgrep ko direct chalane ke bajaye humne ek `SastScanner` interface banaya taaki tests me hum mock scanner chala sakein. LLM ke aage ek `CachedLLMProvider` lagaya jo prompt aur model ka hash banakar disk par store karta hai—par agar network fail ho ya output corrupt ho, toh use cache nahi karta taaki agle run me retry ho sake. Agar koi bhi failure aaye, toh system crash nahi hota, seedha safe `UNCERTAIN` de deta hai.
+
+### 4. Likely Viva Questions & Answers
+- **Q1: Composite cache key me prompt template version aur rule ID include karne ka kya specific reason hai?**  
+  *Answer*: Cache consistency guarantee karne ke liye. Agar hum prompt template me system instructions improve karte hain ya rule definition change hoti hai, toh purana cached response invalid ho jana chahiye. Composite hash ensure karta hai ki template ya model badalte hi automatically fresh API response fetch ho.
+- **Q2: Transient errors (jaise HTTP 503 ya unparseable responses) ko cache me store kyun nahi kiya jata?**  
+  *Answer*: Failures are never cached rule ke tahat. Agar server busy hone par aaye 503 error ya partial JSON response ko hum disk par `UNCERTAIN` cache kar lenge, toh agle run me network theek hone ke bawajood system live API call nahi karega aur finding hamesha ke liye `UNCERTAIN` freeze ho jayegi.
+- **Q3: Design me structured outputs ke sath Pydantic model enforce karne ka kya benefit hai?**  
+  *Answer*: Structured JSON mode format adherence guarantee karta hai (valid JSON with correct keys), jisse string regex parsing ki zaroorat khatam ho jati hai aur parser crashes eliminate hote hain. Note: yeh format guarantee karta hai, verdict ki logical security correctness guarantee nahi karta.
+
+---
+
+## Entry 7: OWASP PyGoat Baseline Semgrep Scan & Analysis
+
+### 1. What Was Built
+- Cloned the target evaluation repository [OWASP PyGoat](https://github.com/adeyosemanputra/pygoat) into an external workspace folder (`C:\dev\targets\pygoat`) outside IntelliScan's own repository.
+- Executed Semgrep CLI across PyGoat using the three standard rule packs:
+  `semgrep scan --config p/python --config p/security-audit --config p/secrets --json --output results/pygoat_3packs.json C:\dev\targets\pygoat`
+- Inspected and verified the resulting baseline findings in `results/pygoat_3packs.json`:
+  - **Total Scanned Files**: 267 files across the PyGoat repository.
+  - **Total Findings**: Exactly **84 findings** identified.
+  - **File Type Distribution**: 75 findings in `.py` source files, 9 findings in `.html` template files.
+  - **Top File Locations**: `views.py` (45 findings), `mitre.py` (10 findings), `apis.py` (8 findings), `app.py` (5 findings), `main.py` (5 findings).
+  - **Top Rule Families**: `@csrf_exempt` (25 findings), `secure-cookies` (12 findings across Django & Flask), `template-unescaped-with-safe` (7 findings), `avoid-pickle` & deserialization (6 findings), `request-data-write` & SQLi (6 findings), MD5 hashing (6 findings), `eval()` & command execution (8 findings).
+
+### 2. Why This Design
+- **External Evaluation Workspace**: Targets must never be cloned inside the assistant's own repository to prevent external vulnerable files from contaminating project linting, testing, or repository indexing.
+- **Understanding Baseline Scanner Distribution**: Analyzing the 84 findings reveals that `@csrf_exempt` represents ~30% (25/84) of all alerts, proving that stratified per-rule-family evaluation is necessary to avoid metric skew.
+- **Critical Scanner Lesson**: In our earlier smoke test on `scripts/vuln_sample`, Semgrep produced only 1 finding because Semgrep OSS strictly scans files tracked by Git when run inside a repository and misses patterns outside its active rule definitions.
+
+### 3. How It Works (Simple Hinglish)
+> Humne OWASP PyGoat ko ek alag folder (`C:\dev\targets\pygoat`) me clone kiya aur uspar Semgrep ke teeno rule packs chalaye. Semgrep ne 267 files scan karke total 84 findings report kiye. Isme se 75 findings Python files me the aur 9 findings HTML templates me the. Sabse zyada findings `views.py` (45) me mile. Sabse common alert `@csrf_exempt` (25 findings) ka tha. Is scan se hume pata chala ki Semgrep git-tracked files hi scan karta hai aur rulesets ke pattern par heavily depend karta hai.
+
+### 4. Likely Viva Questions & Answers
+- **Q1: Semgrep scan me target repository ko alag folder me kyun clone kiya gaya?**  
+  *Answer*: Hermetic project workspace maintain karne ke liye. Agar hum vulnerable app (PyGoat) ko IntelliScan ke apne repo me clone karte, toh hamare local linting (`ruff check`) aur testing (`pytest`) me vulnerable test files mix ho jate.
+- **Q2: PyGoat scan me `@csrf_exempt` itna dominant (25 of 84) kyun hai aur iska evaluation par kya asar padta hai?**  
+  *Answer*: PyGoat educational tool hai jisme multiple lab exercises me testing ko simple banane ke liye views par `@csrf_exempt` lagaya gaya hai. Evaluation me agar hum sirf aggregate precision dikhayenge, toh yeh akela rule 30% weight rakhega, isliye per-rule family breakdown dikhana zaroori hai.
+- **Q3: Semgrep execution me git tracking ka kya impact dekha gaya?**  
+  *Answer*: Semgrep CLI jab kisi git repository ke andar run hota hai, toh by default sirf git-tracked files scan karta hai. Untracked files skip ho jati hain. Isliye accurate benchmarking ke liye target repository clean aur committed git state me hona chahiye.
+
+---
+
+## Entry 8: Ground-Truth Labeling Guidelines (EV-01)
+
+### 1. What Was Built
+- Authored the formal labeling guidelines in [docs/labeling-guidelines.md](labeling-guidelines.md) satisfying requirement **EV-01**.
+- Established core evaluation definitions: `TRUE_POSITIVE`, `FALSE_POSITIVE`, and `AMBIGUOUS`.
+- Designed a generic 5-step decision checklist: Locate & Scope $\rightarrow$ Taint Trace $\rightarrow$ Verify Sanitizers $\rightarrow$ Environment Inspection $\rightarrow$ Final Adjudication.
+- Detailed specific check criteria, TP triggers, and FP triggers for the top rule families extracted from `results/pygoat_3packs.json`.
+- Established bias controls: written protocol pre-dating manual triage, blind evaluation without viewing AI output, and temporal consistency re-labeling of 15 samples after $\ge 3$ days.
+
+### 2. Why This Design
+- **Reducing Confirmation Bias**: Assigning labels before and without seeing model verdicts ensures that the human ground truth is not swayed by the LLM's persuasive explanations.
+- **Grounded in Actual Code Context**: Exploit walkthroughs in `Solutions/solution.md` serve only as an exploratory hint; an alert is labeled `TRUE_POSITIVE` only if the vulnerability is demonstrably present in that specific line/code block.
+- **Transparent Handling of Ambiguity**: `AMBIGUOUS` findings are tracked and reported by count; an `UNCERTAIN` verdict from IntelliScan on an `AMBIGUOUS` finding is treated as an acceptable, aligned outcome.
+
+### 3. How It Works (Simple Hinglish)
+> Humne 84 Semgrep findings ko manually label karne ke liye ek standard checklist (`labeling-guidelines.md`) banayi. Rule yeh hai ki hum AI ka output dekhe bina blind labeling karenge. PyGoat ke `solution.md` ko sirf hint ki tarah use karenge, par actual label code verify karke hi denge. Agar code me weakness genuinely exploitable hai toh `TRUE_POSITIVE`, agar input constant/safe hai toh `FALSE_POSITIVE`, aur agar context adhoora ho toh `AMBIGUOUS`. Agar AI bhi kisi `AMBIGUOUS` alert par `UNCERTAIN` bolega, toh use aligned maana jayega.
+
+### 4. Likely Viva Questions & Answers
+- **Q1: Ground truth create karte waqt 'Blind Labeling' kyun zaroori hai?**  
+  *Answer*: Confirmation bias reduce karne ke liye. LLMs bohot convincing aur persuasive explanations generate karte hain. Agar evaluator pehle AI ka verdict dekh lega, toh subconscious bias ki wajah se woh AI ke answer se agree karne lagega, jisse independent evaluation invalid ho jayegi.
+- **Q2: PyGoat ke `solution.md` ko absolute ground truth ki jagah sirf 'hint' kyun consider kiya gaya?**  
+  *Answer*: PyGoat challenges pure application-level vulnerabilities describe karte hain, jabki Semgrep alerts specific lines of code par trigger hote hain. Ek vulnerable view ke andar bhi kuch specific alerts (jaise harmless debug setting ya non-sensitive cookie) safe ho sakte hain. Isliye specific finding ka code context verify karna mandatory hai.
+- **Q3: Single-labeler study me Inter-Rater Reliability ko approximate karne ke liye kya protocol banaya gaya?**  
+  *Answer*: Temporal consistency test. Initial labeling ke 3 din baad, evaluator 15 random findings ko dobara blind re-label karega aur dono passes ke beech percentage agreement calculate karega. High agreement rate consistent technical decision-making ko demonstrate karta hai.
 
 ---
 
@@ -144,3 +230,9 @@ This log chronicles the step-by-step progress, architectural rationale, simple e
 3. **Agent Fact-Checking & Citation Verification**:
    - *What Happened*: During research, an unverified tool (`sast-triage`) was initially proposed but its GitHub URL returned a 404 HTTP error. Similarly, unsourced claims (e.g. "40% patch regression rate" and "zero FN tolerance") were initially suggested.
    - *Lesson & Fix*: Instituted a strict verification discipline: every claim must be cited with a live URL, unverified URLs are purged immediately, and probabilistic AI behavior is calibrated as a measured target rather than an impossible guarantee.
+4. **Semgrep Git-Tracking Constraint on Uncommitted/Untracked Files**:
+   - *What Happened*: During early smoke testing on `scripts/vuln_sample`, Semgrep reported only 1 finding because Semgrep OSS strictly scans files tracked by Git when executed inside a Git repository.
+   - *Lesson & Fix*: Evaluation target repositories (like PyGoat) must be cloned as complete git repositories and kept in a clean committed state, and external test directories must be explicitly git-tracked or scanned with appropriate path arguments.
+5. **Class Imbalance in Benchmark Repositories**:
+   - *What Happened*: Running the 3 rule packs on PyGoat revealed that 25 of 84 findings (~30%) belong to a single rule (`@csrf_exempt`), while critical vulnerabilities like command injection have only 2 findings.
+   - *Lesson & Fix*: Metrics cannot be evaluated solely on aggregate F1; the evaluation framework must report both aggregate and stratified per-rule-family performance.
